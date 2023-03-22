@@ -8,6 +8,9 @@ const jwt = require("jsonwebtoken");
 const gravatar = require("gravatar");
 const fs = require("fs/promises");
 const path = require("path");
+const { nanoid } = require("nanoid");
+const sendMail = require("../utils/sendEmailUkrnet");
+const sendGridEmail = require("../utils/sendGridEmail");
 require("dotenv").config();
 
 // --------------- signup ------------------------------------------
@@ -19,10 +22,24 @@ const signup = async (req, res) => {
     throw HttpError(409, "Email in use");
   }
   const hashPassword = await bcrypt.hash(password, 10);
+
+  //  send email
+  const { BASE_URL } = process.env;
+  const verificationToken = nanoid();
+  const msg = {
+    to: email,
+    subject: "Varification email",
+    html: `<h1>Email varification</h1> Varification email <a href="${BASE_URL}/user/verify/${verificationToken}">link</a>`,
+  };
+  sendMail(msg);
+  // sendGridEmail(msg);
+  // --------------------------------
+
   const result = await User.create({
     ...req.body,
     password: hashPassword,
     avatarURL,
+    verificationToken,
   });
 
   res.status(201).json({
@@ -44,12 +61,17 @@ const login = async (req, res) => {
     throw HttpError(409, "Email or password is wrong");
   }
 
+  if (!user.verify) {
+    throw HttpError(409, "Email not verified");
+  }
+
+  // create jwt
   const payload = {
     id: user._id,
   };
   const { SECRET_KEY } = process.env;
-
   const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "24h" });
+  // -------------------------------
 
   await User.findByIdAndUpdate(user._id, { token });
 
@@ -67,7 +89,7 @@ const logout = async (req, res) => {
   const { _id } = req.user;
   const user = await User.findByIdAndUpdate(_id, { token: null });
   if (!user) {
-    HttpError(401, "Not authorized");
+    throw HttpError(401, "Not authorized");
   }
   res.status(204).json({
     message: "No Content",
@@ -101,10 +123,28 @@ const updateAvatar = async (req, res) => {
   });
 };
 
+const verify = async (req, res) => {
+  const { verificationToken } = req.params;
+  const user = await User.findOne({ verificationToken });
+
+  if (!user) {
+    throw HttpError(404, "User not found");
+  }
+
+  await User.findByIdAndUpdate(user._id, {
+    verify: true,
+    verificationToken: "",
+  });
+  res.status(200).json({
+    message: "Verification successful",
+  });
+};
+
 module.exports = {
   signup: ctrlWrapper(signup),
   login: ctrlWrapper(login),
   logout: ctrlWrapper(logout),
   current: ctrlWrapper(current),
   updateAvatar: ctrlWrapper(updateAvatar),
+  verify: ctrlWrapper(verify),
 };

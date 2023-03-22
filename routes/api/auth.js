@@ -19,5 +19,6 @@ router.patch(
   upload.single("avatar"),
   ctrl.updateAvatar
 );
+router.get("/verify/:verificationToken", ctrl.verify);
 
 module.exports = router;
