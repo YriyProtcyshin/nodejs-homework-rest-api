@@ -13,6 +13,8 @@ const sendMail = require("../utils/sendEmailUkrnet");
 const sendGridEmail = require("../utils/sendGridEmail");
 require("dotenv").config();
 
+const { BASE_URL } = process.env;
+
 // --------------- signup ------------------------------------------
 const signup = async (req, res) => {
   const { email, password } = req.body;
@@ -24,15 +26,20 @@ const signup = async (req, res) => {
   const hashPassword = await bcrypt.hash(password, 10);
 
   //  send email
-  const { BASE_URL } = process.env;
+
   const verificationToken = nanoid();
   const msg = {
     to: email,
     subject: "Varification email",
-    html: `<h1>Email varification</h1> Varification email <a href="${BASE_URL}/user/verify/${verificationToken}">link</a>`,
+    html: `<h1>Email varification</h1> Varification email <a href="${BASE_URL}/user/verify/${verificationToken}">Click link</a>`,
   };
-  sendMail(msg);
-  // sendGridEmail(msg);
+
+  // const sendEmailError = await sendMail(msg); // sending email through ukr.net
+  const sendEmailError = await sendGridEmail(msg); // sending email through sendgrid
+
+  if (sendEmailError) {
+    throw HttpError(500, sendEmailError);
+  }
   // --------------------------------
 
   const result = await User.create({
@@ -123,6 +130,7 @@ const updateAvatar = async (req, res) => {
   });
 };
 
+// -------------------------- verify -------------------------
 const verify = async (req, res) => {
   const { verificationToken } = req.params;
   const user = await User.findOne({ verificationToken });
@@ -140,6 +148,37 @@ const verify = async (req, res) => {
   });
 };
 
+// -------------------------- resendVerifyEmail -------------------
+const resendVerifyEmail = async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw HttpError(401, "User not found");
+  }
+
+  if (user.verify) {
+    throw HttpError(400, "Verification has already been passed");
+  }
+
+  //  send email
+
+  const msg = {
+    to: user.email,
+    subject: "Varification email",
+    html: `<h1>Email varification</h1> Varification email <a href="${BASE_URL}/user/verify/${user.verificationToken}">Click link</a>`,
+  };
+
+  // const sendEmailError = await sendMail(msg);    // sending email through ukr.net
+  const sendEmailError = await sendGridEmail(msg); // sending email through sendgrid
+  // --------------------------------
+  if (sendEmailError) {
+    throw HttpError(500, sendEmailError);
+  }
+  res.status(200).json({
+    message: "Verification email sent",
+  });
+};
+
 module.exports = {
   signup: ctrlWrapper(signup),
   login: ctrlWrapper(login),
@@ -147,4 +186,5 @@ module.exports = {
   current: ctrlWrapper(current),
   updateAvatar: ctrlWrapper(updateAvatar),
   verify: ctrlWrapper(verify),
+  resendVerifyEmail: ctrlWrapper(resendVerifyEmail),
 };

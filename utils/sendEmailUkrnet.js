@@ -20,15 +20,17 @@ const transport = nodeMailer.createTransport(nodeMailerConfig);
 
 const sendMail = async (data) => {
   const mail = { ...data, from: "bortach@ukr.net" };
-  await transport
+  const sendEmailError = await transport
     .sendMail(mail)
     .then(() => {
       console.log("Email send seccess");
+      return false;
     })
     .catch((error) => {
       console.log(error.message);
+      return error.message;
     });
-  return true;
+  return sendEmailError;
 };
 
 module.exports = sendMail;
